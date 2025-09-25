@@ -1,11 +1,10 @@
 site_name: packagename
-site_url: https://pandoramission.github.io/pandora-blank/
+site_url: https://RomanSpaceTelescope.github.io/talbotextractor/
 docs_dir: docs
 
 nav:
   - Home: README.md
   - API: apidocs.md
-  - Example: notebook-example.ipynb
   
 theme:
   name: "material"
@@ -35,7 +34,7 @@ theme:
         icon: material/brightness-4
         name: Switch to system preference
 
-repo_url: https://github.com/pandoramission/pandora-blank
+repo_url: https://github.com/RomanSpaceTelescope/talbotextractor
 plugins:
   - search
   - include-markdown

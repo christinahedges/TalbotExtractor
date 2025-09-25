@@ -1,9 +1,6 @@
 # Standard library
 import logging  # noqa: E402
 import os  # noqa
-import time  # noqa: E402
-from glob import glob
-from threading import Event, Thread  # noqa: E402
 
 # Third-party
 from rich.console import Console  # noqa: E402
@@ -11,11 +8,12 @@ from rich.logging import RichHandler  # noqa: E402
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
-PANDORASTYLE = glob(f"{PACKAGEDIR}/data/pandora.mplstyle")
+DOCSDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/docs/"
 
 # Standard library
 import configparser  # noqa: E402
-from importlib.metadata import PackageNotFoundError, version  # noqa
+from importlib.metadata import PackageNotFoundError  # noqa
+from importlib.metadata import version as importlibversion  # noqa
 
 # Third-party
 import numpy as np  # noqa: E402
@@ -25,7 +23,7 @@ from appdirs import user_config_dir, user_data_dir  # noqa: E402
 
 def get_version():
     try:
-        return version("packagename")
+        return importlibversion("talbotextractor")
     except PackageNotFoundError:
         return "unknown"
 
@@ -34,7 +32,7 @@ __version__ = get_version()
 
 
 # Custom Logger with Rich
-class PandoraLogger(logging.Logger):
+class Logger(logging.Logger):
     def __init__(self, name, level=logging.INFO):
         super().__init__(name, level)
         console = Console()
@@ -47,41 +45,13 @@ class PandoraLogger(logging.Logger):
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-        self.addHandler(self.handler)
-        self.spinner_thread = None
-        self.spinner_event = None
-
-    def start_spinner(self, message="Processing..."):
-        if self.spinner_thread is None:
-            self.spinner_event = Event()
-            self.spinner_thread = Thread(target=self._spinner, args=(message,))
-            self.spinner_thread.start()
-
-    def stop_spinner(self):
-        if self.spinner_thread is not None:
-            self.spinner_event.set()
-            self.spinner_thread.join()
-            self.spinner_thread = None
-            self.spinner_event = None
-
-    def _spinner(self, message):
-        with self.handler.console.status(
-            "[bold green]" + message
-        ) as status:  # noqa
-            while not self.spinner_event.is_set():
-                time.sleep(0.1)
 
 
-def get_logger(name="packagename"):
-    """Configure and return a logger with RichHandler."""
-    return PandoraLogger(name)
-
-
-CONFIGDIR = user_config_dir("packagename")
+CONFIGDIR = user_config_dir("talbotextractor")
 os.makedirs(CONFIGDIR, exist_ok=True)
 CONFIGPATH = os.path.join(CONFIGDIR, "config.ini")
 
-logger = get_logger("packagename")
+logger = Logger("talbotextractor")
 
 
 def reset_config():
@@ -90,7 +60,7 @@ def reset_config():
     config = configparser.ConfigParser()
     config["SETTINGS"] = {
         "log_level": "WARNING",
-        "data_dir": user_data_dir("pandorapsf"),
+        "data_dir": user_data_dir("talbotextractor"),
     }
     with open(CONFIGPATH, "w") as configfile:
         config.write(configfile)
@@ -151,12 +121,15 @@ def display_config() -> pd.DataFrame:
     dfs = []
     for section in config.sections():
         df = pd.DataFrame(
-            np.asarray(
-                [(key, value) for key, value in dict(config[section]).items()]
-            )
+            np.asarray([(key, value) for key, value in dict(config[section]).items()])
         )
         df["section"] = section
         df.columns = ["key", "value", "section"]
         df = df.set_index(["section", "key"])
         dfs.append(df)
     return pd.concat(dfs)
+
+
+from .extractor import TalbotExtractor  # noqa: E402, F401
+from .frame import Frame  # noqa: E402, F401
+from .exposure import Exposure  # noqa: E402, F401
