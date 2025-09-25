@@ -121,7 +121,9 @@ def display_config() -> pd.DataFrame:
     dfs = []
     for section in config.sections():
         df = pd.DataFrame(
-            np.asarray([(key, value) for key, value in dict(config[section]).items()])
+            np.asarray(
+                [(key, value) for key, value in dict(config[section]).items()]
+            )
         )
         df["section"] = section
         df.columns = ["key", "value", "section"]
@@ -130,6 +132,6 @@ def display_config() -> pd.DataFrame:
     return pd.concat(dfs)
 
 
+from .exposure import Exposure  # noqa: E402, F401
 from .extractor import TalbotExtractor  # noqa: E402, F401
 from .frame import Frame  # noqa: E402, F401
-from .exposure import Exposure  # noqa: E402, F401

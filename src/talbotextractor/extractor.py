@@ -397,12 +397,12 @@ class TalbotExtractor(object):
             rt, ct = coords2
 
             source_row_phase = (rt + cutout_size[0] // 2) % 1
-            source_col_phase = (ct + cutout_size[1] // 2) % 1
+            # source_col_phase = (ct + cutout_size[1] // 2) % 1
             x3d, y3d = (
                 np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2
             )
             x3d = x3d[:, :, None] * np.ones(rt.shape[0])
-            y3d = x3d[:, :, None] * np.ones(rt.shape[0])
+            y3d = y3d[:, :, None] * np.ones(ct.shape[0])
             fig, ax = plt.subplots()
             stamps = image_to_cutouts(
                 im - bkg,
@@ -479,10 +479,10 @@ class TalbotExtractor(object):
             cbar = plt.colorbar(imshow, ax=ax[0, 1], orientation="horizontal")
             cbar.set_label("$\delta$ Pixel")
 
-        coords1, coords2 = self.get_spot_grid(
+        _, coords2 = self.get_spot_grid(
             cutout_size=cutout_size, include_distortion=False
         )
-        r, c = coords1
+        # r, c = coords1
         rt, ct = coords2
         cdx, rdx = (
             np.round(ct + shape[1] // 2).astype(int),

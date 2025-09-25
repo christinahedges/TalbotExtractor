@@ -5,10 +5,11 @@ import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy.fft import fft2, fftshift
 from astropy.io import fits
-from . import __version__
 from astropy.time import Time
+from numpy.fft import fft2, fftshift
+
+from . import __version__
 
 
 def get_pixel_mask(fname):
@@ -214,7 +215,9 @@ def image_to_RS_matrix(
         )
         ax.set(xlabel="Frequency", ylabel="Frequency", aspect="equal")
         [
-            ax.scatter(*p[::-1], s=100, edgecolor=f"C{idx}", facecolor="None", lw=3)
+            ax.scatter(
+                *p[::-1], s=100, edgecolor=f"C{idx}", facecolor="None", lw=3
+            )
             for idx, p in enumerate(peaks)
         ]
         return Rot, Scale, fig
@@ -232,7 +235,9 @@ def image_to_offsets(im, A, nterms=5, plot=False, mask=None):
     r = r.reshape(R.shape)
     c = c.reshape(C.shape)
     k = mask.copy()
-    k &= (im > np.percentile(im[mask], 50)) & (im < np.percentile(im[mask], 99.9))
+    k &= (im > np.percentile(im[mask], 50)) & (
+        im < np.percentile(im[mask], 99.9)
+    )
 
     phi_c = (c[k] % 1) * 2 * np.pi
     phi_r = (r[k] % 1) * 2 * np.pi
@@ -293,7 +298,9 @@ def image_to_offsets(im, A, nterms=5, plot=False, mask=None):
             vmax=np.nanpercentile(X.dot(w), 99),
             s=1,
         )
-        ax.scatter(c_offset, r_offset, c="r", marker="*", label="Best Fit Center")
+        ax.scatter(
+            c_offset, r_offset, c="r", marker="*", label="Best Fit Center"
+        )
         ax.set(
             xlabel="PSF Column Phase",
             ylabel="PSF Row Phase",

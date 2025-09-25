@@ -1,28 +1,26 @@
 """Classes for working at the exposure level"""
 
-from astropy.io import fits
+# Standard library
+import io
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional, Tuple
+
+# Third-party
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from typing import Optional, Tuple, List
+import pandas as pd
+from astropy.io import fits
+from lamatrix import Spline
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.backends.backend_pdf import PdfPages
+from PIL import Image
+from scipy import sparse
+from tqdm import tqdm
 
 from .frame import Frame
 from .utils import get_pixel_mask, primaryHDU
-
-from dataclasses import dataclass
-
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from datetime import datetime
-
-import io
-from PIL import Image
-
-from scipy import sparse
-import pandas as pd
-from tqdm import tqdm
-
-from lamatrix import Spline
 
 
 @dataclass
@@ -69,18 +67,24 @@ class Exposure(object):
         with fits.open(self.filename) as hdulist:
             self.data = hdulist[1].data[0][
                 :,
-                self.cutout_corner[0] : self.cutout_corner[0] + self.cutout_size[0],
-                self.cutout_corner[1] : self.cutout_corner[1] + self.cutout_size[1],
+                self.cutout_corner[0] : self.cutout_corner[0]
+                + self.cutout_size[0],
+                self.cutout_corner[1] : self.cutout_corner[1]
+                + self.cutout_size[1],
             ]
             self.nframes = len(self.data)
 
         if self.pixel_mask is None:
             self.pixel_mask = get_pixel_mask(self.filename)[
-                self.cutout_corner[0] : self.cutout_corner[0] + self.cutout_size[0],
-                self.cutout_corner[1] : self.cutout_corner[1] + self.cutout_size[1],
+                self.cutout_corner[0] : self.cutout_corner[0]
+                + self.cutout_size[0],
+                self.cutout_corner[1] : self.cutout_corner[1]
+                + self.cutout_size[1],
             ]
         if not self.pixel_mask.shape == self.data.shape[1:]:
-            raise ValueError("Must pass a `pixel_mask` with the correct shape.")
+            raise ValueError(
+                "Must pass a `pixel_mask` with the correct shape."
+            )
         self._calibrated = "Uncalibrated"
         self.figs = []
 
@@ -89,7 +93,9 @@ class Exposure(object):
 
     def calibrate(self):
         """Uses"""
-        image = self.data[self.keyframe].astype(float) - self.data[0].astype(float)
+        image = self.data[self.keyframe].astype(float) - self.data[0].astype(
+            float
+        )
         self.keyframe = Frame(
             image=image,
             pixel_mask=self.pixel_mask,
@@ -142,7 +148,13 @@ class Exposure(object):
             fig_cover, ax = plt.subplots(figsize=(8.5, 11))  # letter-size page
             ax.axis("off")
             ax.text(
-                0.5, 0.5, title_text, ha="center", va="center", fontsize=14, wrap=True
+                0.5,
+                0.5,
+                title_text,
+                ha="center",
+                va="center",
+                fontsize=14,
+                wrap=True,
             )
             pdf.savefig(fig_cover)
             plt.close(fig_cover)
@@ -172,7 +184,9 @@ class Exposure(object):
                 buf.close()
 
     def fit_frame_prf(self, frame_index):
-        image = self.data[frame_index].astype(float) - self.data[0].astype(float)
+        image = self.data[frame_index].astype(float) - self.data[0].astype(
+            float
+        )
         frame = Frame(
             image=image,
             pixel_mask=self.pixel_mask,
@@ -207,7 +221,8 @@ class Exposure(object):
         ims = [
             ax.scatter(
                 rad,
-                A.dot(hdulist[idx].data["weights"]) / hdulist[idx].header["norm"],
+                A.dot(hdulist[idx].data["weights"])
+                / hdulist[idx].header["norm"],
                 c=np.ones(A.shape[0]) * idx,
                 vmin=0,
                 vmax=55,
@@ -215,7 +230,9 @@ class Exposure(object):
             )
             for idx in np.arange(1, len(hdulist))
         ]
-        ax.set(xlabel="Radial Distance from Source", ylabel="Normalized Profile")
+        ax.set(
+            xlabel="Radial Distance from Source", ylabel="Normalized Profile"
+        )
         cbar = plt.colorbar(ims[0], ax=ax)
         cbar.set_label("Frame Number")
         if fig.canvas is None or not hasattr(fig.canvas, "print_pdf"):
@@ -226,12 +243,18 @@ class Exposure(object):
         norm = np.asarray(
             [hdulist[idx].header["norm"] for idx in np.arange(1, len(hdulist))]
         )
-        lin = np.cumsum(np.mean(np.diff(norm[20:30])) * np.ones(len(hdulist) - 1))
+        lin = np.cumsum(
+            np.mean(np.diff(norm[20:30])) * np.ones(len(hdulist) - 1)
+        )
 
         fig, ax = plt.subplots()
         ax.plot(np.arange(1, len(hdulist)), norm, c="k", label="Measured")
         ax.plot(
-            np.arange(1, len(hdulist)), lin, c="grey", ls="--", label="Linear Trend"
+            np.arange(1, len(hdulist)),
+            lin,
+            c="grey",
+            ls="--",
+            label="Linear Trend",
         )
         ax.plot()
         ax.set(xlabel="Frame Number", ylabel="Point Normalization [DN]")
@@ -244,7 +267,9 @@ class Exposure(object):
     def fit_frame(self, frame_index):
         """Fit an individual frame"""
         if self._calibrated != "Calibrated":
-            raise ValueError("Must calibrate the data first before fitting the frames.")
+            raise ValueError(
+                "Must calibrate the data first before fitting the frames."
+            )
         if frame_index == 0:
             raise ValueError(
                 "Can not fit the first frame, this is used for subtraction."
@@ -256,7 +281,9 @@ class Exposure(object):
                     *self.keyframe.spot_talbot_locations,
                     *(
                         np.asarray(self.keyframe.spot_pixel_locations)
-                        + np.asarray(self.keyframe.spot_pixel_location_distortion)
+                        + np.asarray(
+                            self.keyframe.spot_pixel_location_distortion
+                        )
                     ),
                 ]
             ).T,
@@ -265,14 +292,18 @@ class Exposure(object):
         frame = self.fit_frame_prf(frame_index)
 
         k = frame.pixel_mask.ravel()
-        Lc = np.sum([L.multiply(w) for L, w in zip(self.Ls, frame.weights)]).tocsr()
+        Lc = np.sum(
+            [L.multiply(w) for L, w in zip(self.Ls, frame.weights)]
+        ).tocsr()
         Lc.eliminate_zeros()
         prior_mu = np.zeros(Lc.shape[1])
         prior_sigma = np.ones(Lc.shape[1]) * 1e6
 
         best_fit_weights = sparse.linalg.spsolve(
             Lc[k].T.dot(Lc[k]) + sparse.diags(1 / prior_sigma**2),
-            sparse.csc_matrix(Lc[k].T.dot((frame.image - frame.bkg).ravel()[k])).T
+            sparse.csc_matrix(
+                Lc[k].T.dot((frame.image - frame.bkg).ravel()[k])
+            ).T
             + sparse.csr_matrix(prior_mu / prior_sigma**2).T,
         )  # / frame.psf_norm
         rt, ct = frame.spot_pixel_locations
@@ -280,7 +311,9 @@ class Exposure(object):
         rt -= frame.cutout_center[0] - dy
         ct -= frame.cutout_center[1] - dx
         tot = np.asarray(
-            Lc.multiply(frame.pixel_mask.ravel()[:, None].astype(float)).sum(axis=0)
+            Lc.multiply(frame.pixel_mask.ravel()[:, None].astype(float)).sum(
+                axis=0
+            )
         )[0]
         j = tot > 0.7 * tot.max()
         j &= best_fit_weights > 0
