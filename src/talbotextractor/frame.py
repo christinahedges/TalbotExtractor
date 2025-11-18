@@ -94,7 +94,9 @@ class Frame(object):
                 [self.cutout_corner[0], self.cutout_corner[1], 1],
             ]
         )
-        self.cutout_bounds = self.cutout_points - np.asarray([*self.cutout_center, 0])
+        self.cutout_bounds = self.cutout_points - np.asarray(
+            [*self.cutout_center, 0]
+        )
 
         if pixel_mask is None:
             self.pixel_mask = np.ones(self.cutout_size, bool)
@@ -176,7 +178,9 @@ class Frame(object):
     def spot_pixel_locations(self):
         """Get a grid of spot positions"""
         r, c = self.spot_talbot_locations
-        rt, ct, _ = (np.asarray([r.ravel(), c.ravel(), r.ravel() ** 0]).T @ self.A).T
+        rt, ct, _ = (
+            np.asarray([r.ravel(), c.ravel(), r.ravel() ** 0]).T @ self.A
+        ).T
         return rt + self.cutout_center[0], ct + self.cutout_center[1]
 
     @property
@@ -212,7 +216,9 @@ class Frame(object):
             ct - self.cutout_corner[1],
             subimage_size,
         )
-        sR, sC = np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        sR, sC = (
+            np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        )
         return sR[:, :, None] - (rt % 1), sC[:, :, None] - (ct % 1), stamps
 
     def get_gaussian_spot_design_matrices(self, subimage_size=19):
@@ -225,7 +231,9 @@ class Frame(object):
             np.floor(rt).astype(int),
             np.floor(ct).astype(int),
         )
-        sR, sC = np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        sR, sC = (
+            np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        )
         row3d = sR[:, :, None] + source_row_int
         col3d = sC[:, :, None] + source_col_int
         Ls = []
@@ -255,7 +263,9 @@ class Frame(object):
             np.floor(rt).astype(int),
             np.floor(ct).astype(int),
         )
-        sR, sC = np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        sR, sC = (
+            np.mgrid[:subimage_size, :subimage_size] - subimage_size // 2 + 1
+        )
         row3d = sR[:, :, None] + source_row_int
         col3d = sC[:, :, None] + source_col_int
         rad = np.hypot(row3d - rt, col3d - ct)
@@ -326,15 +336,29 @@ class Frame(object):
 
         k = self.pixel_mask.copy().ravel()
         for count in range(1):
-            w = np.linalg.solve(S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k]))
+            w = np.linalg.solve(
+                S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k])
+            )
             spline_weights = w[(self.poly_order + 1) ** 2 :]
             L = np.sum([L.multiply(w) for L, w in zip(Ls, spline_weights)])
             A = np.vstack([X.T, L.dot(np.ones(L.shape[1])) * X.T]).T
-            v = np.linalg.solve(A[k].T.dot(A[k]), A[k].T.dot(self.image.ravel()[k]))
+            v = np.linalg.solve(
+                A[k].T.dot(A[k]), A[k].T.dot(self.image.ravel()[k])
+            )
 
-            bkg = A[:, : X.shape[1]].dot(v[: X.shape[1]]).reshape(self.cutout_size)
-            spots = A[:, X.shape[1] :].dot(v[X.shape[1] :]).reshape(self.cutout_size)
-            spot_normalization = X.dot(v[X.shape[1] :]).reshape(self.cutout_size)
+            bkg = (
+                A[:, : X.shape[1]]
+                .dot(v[: X.shape[1]])
+                .reshape(self.cutout_size)
+            )
+            spots = (
+                A[:, X.shape[1] :]
+                .dot(v[X.shape[1] :])
+                .reshape(self.cutout_size)
+            )
+            spot_normalization = X.dot(v[X.shape[1] :]).reshape(
+                self.cutout_size
+            )
             spot_normalization *= spline_weights.sum()
 
             # s = np.argsort((self.image - bkg - spots).ravel())
@@ -342,7 +366,9 @@ class Frame(object):
             # ns = int(np.ceil(len(s) * 0.005))
             # k[np.hstack([s[:ns], s[-ns:]])] = False
         # update pixel mask
-        resids = (self.image - bkg) / spot_normalization - (spots / spot_normalization)
+        resids = (self.image - bkg) / spot_normalization - (
+            spots / spot_normalization
+        )
         self.pixel_mask &= resids < 0.5
         laplacian = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
         self.pixel_mask &= np.abs(convolve(resids, laplacian)) < 1
@@ -357,7 +383,9 @@ class Frame(object):
         A = X.design_matrix(rad=rad) / 0.25
         normalization = 2 * np.pi * np.abs(knots[1:-2] + 0.125)
         A /= normalization[None, :]
-        self.psf_norm = np.trapz(np.trapz(A.dot(self.weights), R[:, 0], axis=0), C[0])
+        self.psf_norm = np.trapz(
+            np.trapz(A.dot(self.weights), R[:, 0], axis=0), C[0]
+        )
         self.spot_normalization = spot_normalization
 
     def _fit_bkg_and_spots_gaussian(self, Ls=None):
@@ -373,8 +401,12 @@ class Frame(object):
 
         k = self.pixel_mask.copy().ravel()
         for count in range(3):
-            w = np.linalg.solve(S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k]))
-            bkg = X.dot(w[: (self.poly_order + 1) ** 2]).reshape(self.cutout_size)
+            w = np.linalg.solve(
+                S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k])
+            )
+            bkg = X.dot(w[: (self.poly_order + 1) ** 2]).reshape(
+                self.cutout_size
+            )
             spots = (
                 S[:, (self.poly_order + 1) ** 2 :]
                 .dot(np.hstack(w[(self.poly_order + 1) ** 2 :]))
@@ -389,7 +421,9 @@ class Frame(object):
             X.dot(w[pol : 2 * pol]) + X.dot(w[2 * pol : 3 * pol])
         ).reshape(self.cutout_size)
         # update pixel mask
-        resids = (self.image - bkg) / spot_normalization - (spots / spot_normalization)
+        resids = (self.image - bkg) / spot_normalization - (
+            spots / spot_normalization
+        )
         self.pixel_mask &= resids < 0.5
         laplacian = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
         self.pixel_mask &= np.abs(convolve(resids, laplacian)) < 1
@@ -409,12 +443,15 @@ class Frame(object):
         self.fit_bkg_and_spots()
         with np.errstate(divide="ignore", invalid="ignore"):
             sR, sC, stamps = self.get_stamps(
-                ((self.image - self.bkg) / self.spot_normalization) / self.pixel_mask
+                ((self.image - self.bkg) / self.spot_normalization)
+                / self.pixel_mask
             )
         rt, ct = self.spot_pixel_locations
         lR, lC = (
-            (np.ones(sR.shape) * rt - self.cutout_center[0]) / self.cutout_size[0],
-            (np.ones(sC.shape) * ct - self.cutout_center[1]) / self.cutout_size[1],
+            (np.ones(sR.shape) * rt - self.cutout_center[0])
+            / self.cutout_size[0],
+            (np.ones(sC.shape) * ct - self.cutout_center[1])
+            / self.cutout_size[1],
         )
         k = (
             (stamps > 0)
@@ -441,8 +478,10 @@ class Frame(object):
 
         if not np.all(self.sip.posteriors.mean == 0):
             R, C = np.mgrid[
-                self.cutout_corner[0] : self.cutout_corner[0] + self.cutout_size[0],
-                self.cutout_corner[1] : self.cutout_corner[1] + self.cutout_size[1],
+                self.cutout_corner[0] : self.cutout_corner[0]
+                + self.cutout_size[0],
+                self.cutout_corner[1] : self.cutout_corner[1]
+                + self.cutout_size[1],
             ].astype(float)
             R -= self.cutout_center[0]
             C -= self.cutout_center[1]
@@ -485,7 +524,12 @@ class Frame(object):
             cbar.set_label("$\delta$ Pixel")
 
         dy, dx = self.spot_pixel_location_distortion
-        k = (stamps > 0) & np.isfinite(sC) & np.isfinite(sR) & np.isfinite(stamps)
+        k = (
+            (stamps > 0)
+            & np.isfinite(sC)
+            & np.isfinite(sR)
+            & np.isfinite(stamps)
+        )
         imshow = bin2d(
             (sR)[k],
             (sC)[k],
@@ -531,7 +575,9 @@ class Frame(object):
         rt, ct = self.spot_pixel_locations
         if ax is None:
             _, ax = plt.subplots()
-        im = ax.pcolormesh(self.C, self.R, self.image / self.pixel_mask, **kwargs)
+        im = ax.pcolormesh(
+            self.C, self.R, self.image / self.pixel_mask, **kwargs
+        )
         ax.scatter(*self.cutout_corner[::-1], s=100, marker="*", c="r")
         ax.scatter(*self.cutout_center[::-1], s=100, marker="*", c="r")
         ax.plot(*self.cutout_points[:, :2][:, ::-1].T, c="r")
@@ -557,10 +603,13 @@ class Frame(object):
 
     def plot_spot_model(self, ax=None):
         sR, sC, stamps = self.get_stamps(
-            ((self.image - self.bkg) / self.spot_normalization) / self.pixel_mask
+            ((self.image - self.bkg) / self.spot_normalization)
+            / self.pixel_mask
         )
 
-        _, _, model_stamps = self.get_stamps(self.spots / self.spot_normalization)
+        _, _, model_stamps = self.get_stamps(
+            self.spots / self.spot_normalization
+        )
         dy, dx = self.spot_pixel_location_distortion
         sR -= dy[None, None, :]
         sC -= dx[None, None, :]
