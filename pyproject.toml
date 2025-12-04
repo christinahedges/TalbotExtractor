@@ -1,6 +1,6 @@
 [project]
 name = "talbotextractor"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = [
     {name = "Christina Hedges",email = "christina.l.hedges@nasa.gov"}
@@ -13,7 +13,7 @@ dependencies = [
     "pandas (>=2.2.3,<3.0.0)",
     "appdirs (>=1.4.4,<2.0.0)",
     "lamatrix (>=1.0.0,<2.0.0)",
-    "sparse3d (>=1.0.3,<2.0.0)",
+    "sparse3d (>=1.2.10)",
     "astropy (>=6.0.0)",
     "tqdm (>=4.67.1,<5.0.0)",
     "fitsio (>=1.2.6,<2.0.0)",

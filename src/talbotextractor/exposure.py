@@ -20,7 +20,7 @@ from scipy import sparse
 from tqdm import tqdm
 
 from .frame import Frame
-from .utils import get_pixel_mask, primaryHDU
+from .utils import get_pixel_mask, image_to_offsets, primaryHDU
 
 
 @dataclass
@@ -87,6 +87,7 @@ class Exposure(object):
             )
         self._calibrated = "Uncalibrated"
         self.figs = []
+        self.saturated_mask = (self.data > 0.95 * 2**16).any(axis=0)
 
     def __repr__(self):
         return f"TalbotExposure [{self.filename}] [{self._calibrated}]"
@@ -187,6 +188,11 @@ class Exposure(object):
         image = self.data[frame_index].astype(float) - self.data[0].astype(
             float
         )
+        O = image_to_offsets(image, self.keyframe.Rot @ self.keyframe.Scale)
+        r_offset, c_offset = O[:2, 2] - self.keyframe.Offset[:2, 2]
+        O2 = np.eye(3)
+        O2[:2, 2] = r_offset, c_offset
+
         frame = Frame(
             image=image,
             pixel_mask=self.pixel_mask,
@@ -195,10 +201,10 @@ class Exposure(object):
             sip_order=self.sip_order,
             kind=self.kind,
             sigmas=self.sigmas,
-            A=self.keyframe.A,
+            A=self.keyframe.A @ O2.T,
             sip=self.keyframe.sip,
         )
-        frame.fit_bkg_and_spots(Ls=self.Ls)
+        frame.fit_bkg_and_spots()
         return frame
 
     def get_prf_hdulist(self):
@@ -264,6 +270,44 @@ class Exposure(object):
         self.figs.append(fig)
         plt.close(fig)
 
+        rcent = np.asarray(
+            [
+                hdulist[idx].header["RCENT"]
+                for idx in np.arange(1, len(hdulist))
+            ]
+        )
+        ccent = np.asarray(
+            [
+                hdulist[idx].header["CCENT"]
+                for idx in np.arange(1, len(hdulist))
+            ]
+        )
+        rcent -= np.mean(rcent)
+        ccent -= np.mean(ccent)
+
+        fig, ax = plt.subplots()
+        ax.plot(
+            np.arange(1, len(hdulist)),
+            rcent,
+            c="r",
+            ls="--",
+            label="Row centroid",
+        )
+        ax.plot(
+            np.arange(1, len(hdulist)),
+            ccent,
+            c="b",
+            ls="--",
+            label="Column centroid",
+        )
+        ax.plot()
+        ax.set(xlabel="Frame Number", ylabel="Centroid [pixel]")
+        ax.legend()
+        if fig.canvas is None or not hasattr(fig.canvas, "print_pdf"):
+            FigureCanvas(fig)  # attach a non-GUI canvas
+        self.figs.append(fig)
+        plt.close(fig)
+
     def fit_frame(self, frame_index):
         """Fit an individual frame"""
         if self._calibrated != "Calibrated":
@@ -292,9 +336,8 @@ class Exposure(object):
         frame = self.fit_frame_prf(frame_index)
 
         k = frame.pixel_mask.ravel()
-        Lc = np.sum(
-            [L.multiply(w) for L, w in zip(self.Ls, frame.weights)]
-        ).tocsr()
+        Ls = frame.get_spline_spot_design_matrices()
+        Lc = np.sum([L.multiply(w).tocsr() for L, w in zip(Ls, frame.weights)])
         Lc.eliminate_zeros()
         prior_mu = np.zeros(Lc.shape[1])
         prior_sigma = np.ones(Lc.shape[1]) * 1e6
@@ -325,14 +368,15 @@ class Exposure(object):
         df["bkg"] = X.dot(frame.bkg_weights)
         w = np.linalg.solve(X[j].T.dot(X[j]), X[j].T.dot(df.flux.values[j]))
         df["correction"] = X.dot(w) / np.mean(X[j].dot(w))
-
-        return frame, df
+        model = Lc.dot(best_fit_weights).reshape(self.cutout_size)
+        return frame, df, model
 
     def get_all_hdulists(self):
         prf_hdus = []
         spot_hdus = []
+        model_hdus = []
         for idx in tqdm(np.arange(1, self.nframes), position=0, leave=True):
-            frame, df = self.fit_frame(idx)
+            frame, df, model = self.fit_frame(idx)
             prf_hdus.append(frame.prf_hdulist[1])
             spot_hdus.append(
                 fits.TableHDU.from_columns(
@@ -343,9 +387,16 @@ class Exposure(object):
                     name=f"FRAME_{idx:02}",
                 )
             )
+            model_hdus.append(
+                fits.CompImageHDU(
+                    model,
+                    name=f"FRAME_{idx:02}",
+                )
+            )
 
         hdu0 = primaryHDU()
         prf_hdulist = fits.HDUList([hdu0, *prf_hdus])
         spot_hdulist = fits.HDUList([hdu0, *spot_hdus])
+        model_hdulist = fits.HDUList([hdu0, *model_hdus])
         self._plot_prf_hdulist(prf_hdulist)
-        return prf_hdulist, spot_hdulist
+        return prf_hdulist, spot_hdulist, model_hdulist

@@ -1,6 +1,7 @@
 """Class to work with a single frame from Talbot Illuminator exposures"""
 
 # Standard library
+import warnings
 from typing import Optional, Tuple
 
 # Third-party
@@ -22,6 +23,10 @@ from talbotextractor.utils import (
     image_to_RS_matrix,
 )
 from .utils import primaryHDU
+
+warnings.filterwarnings(
+    "ignore", message="divide by zero encountered in divide"
+)
 
 
 class Frame(object):
@@ -121,6 +126,7 @@ class Frame(object):
 
         self.bkg = np.percentile(self.image, 20)
         self.spot_normalization = 1
+        # self.rcent, self.ccent = 0, 0
 
     @property
     def Ainv(self):
@@ -131,6 +137,16 @@ class Frame(object):
 
     def __repr__(self):
         return f"TalbotFrame {self.cutout_size}"
+
+    def _get_offset_matrix(self, plot=False):
+        if not hasattr(self, "Rot"):
+            raise ValueError("Calculate rough position calibration first")
+        return image_to_offsets(
+            (self.image - self.bkg) / self.spot_normalization,
+            self.Rot @ self.Scale,
+            mask=self.pixel_mask,
+            plot=plot,
+        )
 
     def _rough_position_calibration(
         self,
@@ -143,25 +159,20 @@ class Frame(object):
             (self.image - self.bkg) / self.spot_normalization,
             fourier_resolution=fourier_resolution,
             minimum_period=spot_spacing_bounds[0],
-            maximum_period=spot_spacing_bounds[0],
+            maximum_period=spot_spacing_bounds[1],
             plot=plot,
         )
         if plot:
-            Rot, Scale, fig1 = r
+            self.Rot, self.Scale, fig1 = r
         else:
-            Rot, Scale = r
+            self.Rot, self.Scale = r
 
-        r = image_to_offsets(
-            (self.image - self.bkg) / self.spot_normalization,
-            Rot @ Scale,
-            mask=self.pixel_mask,
-            plot=plot,
-        )
         if plot:
-            Offset, fig2 = r
+            self.Offset, fig2 = self._get_offset_matrix(plot=True)
         else:
-            Offset = r
-        self.A = Rot @ Scale @ Offset.T
+            self.Offset = self._get_offset_matrix(plot=False)
+
+        self.A = self.Rot @ self.Scale @ self.Offset.T
         if plot:
             return fig1, fig2
 
@@ -340,7 +351,9 @@ class Frame(object):
                 S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k])
             )
             spline_weights = w[(self.poly_order + 1) ** 2 :]
-            L = np.sum([L.multiply(w) for L, w in zip(Ls, spline_weights)])
+            L = np.sum(
+                [L.multiply(w).tocsr() for L, w in zip(Ls, spline_weights)]
+            )
             A = np.vstack([X.T, L.dot(np.ones(L.shape[1])) * X.T]).T
             v = np.linalg.solve(
                 A[k].T.dot(A[k]), A[k].T.dot(self.image.ravel()[k])
@@ -571,6 +584,19 @@ class Frame(object):
             plt.subplots_adjust(wspace=0.1)
         return fig
 
+    # def fit_centroid(self):
+    #     sR, sC, stamps = self.get_stamps(
+    #         ((self.image - self.bkg) / self.spot_normalization) / self.pixel_mask
+    #     )
+    #     dy, dx = self.spot_pixel_location_distortion
+    #     sR -= dy[None, None, :]
+    #     sC -= dx[None, None, :]
+
+    #     k = (stamps > np.nanpercentile(stamps, 50)) & np.isfinite(stamps)
+    #     self.rcent = np.average(sR[k], weights=stamps[k])
+    #     self.ccent = np.average(sC[k], weights=stamps[k])
+    #     return
+
     def plot_frame(self, ax=None, **kwargs):
         rt, ct = self.spot_pixel_locations
         if ax is None:
@@ -662,6 +688,8 @@ class Frame(object):
         hdu2.header["corner1"] = self.cutout_corner[1]
         hdu2.header["size0"] = self.cutout_size[0]
         hdu2.header["size1"] = self.cutout_size[1]
+        hdu2.header["rcent"] = self.A.T[0, 2]
+        hdu2.header["ccent"] = self.A.T[1, 2]
 
         hdu2.header["hardsat"] = (self.image >= (2**16 - 1)).sum()
         hdu2.header["softsat"] = (self.image >= 0.9 * (2**16 - 1)).sum()

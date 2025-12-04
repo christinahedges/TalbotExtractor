@@ -224,7 +224,170 @@ def image_to_RS_matrix(
     return Rot, Scale
 
 
-def image_to_offsets(im, A, nterms=5, plot=False, mask=None):
+# def image_to_offsets(im, A, nterms=5, plot=False, mask=None):
+#     if mask is None:
+#         mask = np.ones(im.shape, bool)
+#     Ainv = np.linalg.inv(A)
+#     R, C = np.mgrid[: im.shape[0], : im.shape[1]]
+#     R -= im.shape[0] // 2
+#     C -= im.shape[1] // 2
+#     r, c, _ = (np.asarray([R.ravel(), C.ravel(), R.ravel() ** 0]).T @ Ainv).T
+#     r = r.reshape(R.shape)
+#     c = c.reshape(C.shape)
+#     k = mask.copy()
+#     k &= (im > np.percentile(im[mask], 50)) & (im < np.percentile(im[mask], 99.9))
+
+#     phi_c = (c[k] % 1) * 2 * np.pi
+#     phi_r = (r[k] % 1) * 2 * np.pi
+#     Xc = np.vstack(
+#         [
+#             np.ones((1, phi_c.shape[0])),
+#             *[
+#                 [np.cos(phi_c * idx), np.sin(phi_c * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     Xr = np.vstack(
+#         [
+#             np.ones((1, phi_r.shape[0])),
+#             *[
+#                 [np.cos(phi_r * idx), np.sin(phi_r * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     X = np.hstack([Xc * xr[:, None] for xr in Xr.T])
+#     w = np.linalg.solve(X.T.dot(X), X.T.dot(im[k]))
+
+#     r_m, c_m = np.mgrid[0:1:200j, 0:1:200j]
+#     phi_c_m = (c_m.ravel() % 1) * 2 * np.pi
+#     phi_r_m = (r_m.ravel() % 1) * 2 * np.pi
+#     Xc = np.vstack(
+#         [
+#             np.ones((1, phi_c_m.shape[0])),
+#             *[
+#                 [np.cos(phi_c_m * idx), np.sin(phi_c_m * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     Xr = np.vstack(
+#         [
+#             np.ones((1, phi_r_m.shape[0])),
+#             *[
+#                 [np.cos(phi_r_m * idx), np.sin(phi_r_m * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     X = np.hstack([Xc * xr[:, None] for xr in Xr.T])
+#     r_offset, c_offset = (
+#         phi_r_m[np.argmax(X.dot(w))] / (2 * np.pi),
+#         phi_c_m[np.argmax(X.dot(w))] / (2 * np.pi),
+#     )
+#     if plot:
+#         fig, ax = plt.subplots(figsize=(5, 5))
+#         ax.scatter(
+#             phi_c_m / (2 * np.pi),
+#             phi_r_m / (2 * np.pi),
+#             c=X.dot(w),
+#             vmin=np.nanpercentile(X.dot(w), 90),
+#             vmax=np.nanpercentile(X.dot(w), 99.9),
+#             s=1,
+#         )
+#         ax.scatter(c_offset, r_offset, c="r", marker="*", label="Best Fit Center")
+#         ax.set(
+#             xlabel="PSF Column Phase",
+#             ylabel="PSF Row Phase",
+#             title="Aligned PSFs",
+#         )
+#         ax.legend()
+#     r_offset, c_offset = (np.asarray([r_offset, c_offset, 1]) @ A)[:2]
+#     O = np.eye(3)  # noqa: E741
+#     O[:2, 2] = [r_offset, c_offset]
+#     if plot:
+#         return O, fig
+#     return O
+
+
+# def image_to_offsets(im, A, nterms=10, plot=False, mask=None):
+#     if mask is None:
+#         mask = np.ones(im.shape, bool)
+#     Ainv = np.linalg.inv(A)
+#     R, C = np.mgrid[: im.shape[0], : im.shape[1]]
+#     R -= im.shape[0] // 2
+#     C -= im.shape[1] // 2
+#     r, c, _ = (np.asarray([R.ravel(), C.ravel(), R.ravel() ** 0]).T @ Ainv).T
+#     r = r.reshape(R.shape)
+#     c = c.reshape(C.shape)
+#     k = mask.copy()
+#     k &= (im > np.percentile(im[mask], 50)) & (im < np.percentile(im[mask], 99.9))
+
+#     phi_c = (c[k] % 1) * 2 * np.pi
+#     phi_r = (r[k] % 1) * 2 * np.pi
+#     Xc = np.vstack(
+#         [
+#             np.ones((1, phi_c.shape[0])),
+#             *[
+#                 [np.cos(phi_c * idx), np.sin(phi_c * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     Xr = np.vstack(
+#         [
+#             np.ones((1, phi_r.shape[0])),
+#             *[
+#                 [np.cos(phi_r * idx), np.sin(phi_r * idx)]
+#                 for idx in np.arange(1, nterms + 1)
+#             ],
+#         ]
+#     ).T
+#     X = np.hstack([Xc * xr[:, None] for xr in Xr.T])
+#     w = np.linalg.solve(X.T.dot(X), X.T.dot(im[k]))
+
+#     roffset0 = np.nanmedian(phi_r[im[k] > np.nanpercentile(im, 99)] / (2 * np.pi))
+#     coffset0 = np.nanmedian(phi_c[im[k] > np.nanpercentile(im, 99)] / (2 * np.pi))
+
+#     r_offset, c_offset = (
+#         np.average((r[k] - roffset0 + 0.5) % 1, weights=im[k]) + roffset0 - 0.5,
+#         np.average((c[k] - coffset0 + 0.5) % 1, weights=im[k]) + coffset0 - 0.5,
+#     )
+#     if plot:
+#         fig, ax = plt.subplots(figsize=(5, 5))
+#         ax.scatter(
+#             (c[k] - coffset0 + 0.5) % 1,
+#             (r[k] - roffset0 + 0.5) % 1,
+#             c=im[k],
+#             vmin=np.nanpercentile(im[k], 50),
+#             vmax=np.nanpercentile(im[k], 99.9),
+#             s=1,
+#         )
+#         ax.scatter(
+#             c_offset - coffset0 + 0.5,
+#             r_offset - roffset0 + 0.5,
+#             c="r",
+#             marker="*",
+#             label="Best Fit Center",
+#         )
+#         ax.set(
+#             xlabel="PSF Column Phase",
+#             ylabel="PSF Row Phase",
+#             title="Aligned PSFs",
+#             xlim=(0, 1),
+#             ylim=(0, 1),
+#         )
+#         ax.legend()
+#     r_offset, c_offset = (np.asarray([r_offset, c_offset, 1]) @ A)[:2]
+#     O = np.eye(3)  # noqa: E741
+#     O[:2, 2] = [r_offset, c_offset]
+#     if plot:
+#         return O, fig
+#     return O
+
+
+def image_to_offsets(im, A, plot=False, mask=None):
     if mask is None:
         mask = np.ones(im.shape, bool)
     Ainv = np.linalg.inv(A)
@@ -234,82 +397,41 @@ def image_to_offsets(im, A, nterms=5, plot=False, mask=None):
     r, c, _ = (np.asarray([R.ravel(), C.ravel(), R.ravel() ** 0]).T @ Ainv).T
     r = r.reshape(R.shape)
     c = c.reshape(C.shape)
+    if mask is None:
+        mask = np.ones(im.shape, bool)
     k = mask.copy()
+
     k &= (im > np.percentile(im[mask], 50)) & (
         im < np.percentile(im[mask], 99.9)
     )
-
-    phi_c = (c[k] % 1) * 2 * np.pi
-    phi_r = (r[k] % 1) * 2 * np.pi
-    Xc = np.vstack(
-        [
-            np.ones((1, phi_c.shape[0])),
-            *[
-                [np.cos(phi_c * idx), np.sin(phi_c * idx)]
-                for idx in np.arange(1, nterms + 1)
-            ],
-        ]
-    ).T
-    Xr = np.vstack(
-        [
-            np.ones((1, phi_r.shape[0])),
-            *[
-                [np.cos(phi_r * idx), np.sin(phi_r * idx)]
-                for idx in np.arange(1, nterms + 1)
-            ],
-        ]
-    ).T
-    X = np.hstack([Xc * xr[:, None] for xr in Xr.T])
-    w = np.linalg.solve(X.T.dot(X), X.T.dot(im[k]))
-
-    r_m, c_m = np.mgrid[0:1:200j, 0:1:200j]
-    phi_c_m = (c_m.ravel() % 1) * 2 * np.pi
-    phi_r_m = (r_m.ravel() % 1) * 2 * np.pi
-    Xc = np.vstack(
-        [
-            np.ones((1, phi_c_m.shape[0])),
-            *[
-                [np.cos(phi_c_m * idx), np.sin(phi_c_m * idx)]
-                for idx in np.arange(1, nterms + 1)
-            ],
-        ]
-    ).T
-    Xr = np.vstack(
-        [
-            np.ones((1, phi_r_m.shape[0])),
-            *[
-                [np.cos(phi_r_m * idx), np.sin(phi_r_m * idx)]
-                for idx in np.arange(1, nterms + 1)
-            ],
-        ]
-    ).T
-    X = np.hstack([Xc * xr[:, None] for xr in Xr.T])
-    r_offset, c_offset = (
-        phi_r_m[np.argmax(X.dot(w))] / (2 * np.pi),
-        phi_c_m[np.argmax(X.dot(w))] / (2 * np.pi),
+    roffset0 = np.nanmedian(r[k][im[k] > np.nanpercentile(im, 99)] % 1)
+    coffset0 = np.nanmedian(c[k][im[k] > np.nanpercentile(im, 99)] % 1)
+    phi_r, phi_c = (r - roffset0 + 0.5) % 1, (c - coffset0 + 0.5) % 1
+    rcent, ccent = (
+        np.average(phi_r[k], weights=im[k]),
+        np.average(phi_c[k], weights=im[k]),
     )
+
     if plot:
         fig, ax = plt.subplots(figsize=(5, 5))
+        ax.scatter(phi_c.ravel(), phi_r.ravel(), c=im.ravel(), s=1, alpha=0.1)
         ax.scatter(
-            phi_c_m / (2 * np.pi),
-            phi_r_m / (2 * np.pi),
-            c=X.dot(w),
-            vmin=np.nanpercentile(X.dot(w), 50),
-            vmax=np.nanpercentile(X.dot(w), 99),
-            s=1,
+            ccent,
+            rcent,
+            c="r",
+            s=10,
+            marker="*",
+            label="Best Fit Center",
         )
-        ax.scatter(
-            c_offset, r_offset, c="r", marker="*", label="Best Fit Center"
-        )
-        ax.set(
-            xlabel="PSF Column Phase",
-            ylabel="PSF Row Phase",
-            title="Aligned PSFs",
-        )
+
         ax.legend()
-    r_offset, c_offset = (np.asarray([r_offset, c_offset, 1]) @ A)[:2]
+
+    roffset = rcent + roffset0 - 0.5
+    coffset = ccent + coffset0 - 0.5
+    roffset, coffset = (np.asarray([roffset, coffset, 1]) @ A)[:2]
+
     O = np.eye(3)  # noqa: E741
-    O[:2, 2] = [r_offset, c_offset]
+    O[:2, 2] = [roffset, coffset]
     if plot:
         return O, fig
     return O
