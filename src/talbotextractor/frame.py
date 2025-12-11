@@ -202,11 +202,11 @@ class Frame(object):
                 dx = np.zeros(self.nspots)
                 dy = np.zeros(self.nspots)
             else:
-                dx = self.sip.mu_x_to_Polynomial().evaluate(
+                dx = self.sip.mu_x_to_Model().evaluate(
                     x=(ct - self.cutout_center[1]) / self.cutout_size[1],
                     y=(rt - self.cutout_center[0]) / self.cutout_size[0],
                 )
-                dy = self.sip.mu_y_to_Polynomial().evaluate(
+                dy = self.sip.mu_y_to_Model().evaluate(
                     x=(ct - self.cutout_center[1]) / self.cutout_size[1],
                     y=(rt - self.cutout_center[0]) / self.cutout_size[0],
                 )
@@ -344,40 +344,28 @@ class Frame(object):
                 *[L.dot(np.ones(L.shape[1])).ravel() for L in Ls],
             ]
         ).T
-
         k = self.pixel_mask.copy().ravel()
-        for count in range(1):
-            w = np.linalg.solve(
-                S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k])
-            )
-            spline_weights = w[(self.poly_order + 1) ** 2 :]
-            L = np.sum(
-                [L.multiply(w).tocsr() for L, w in zip(Ls, spline_weights)]
-            )
-            A = np.vstack([X.T, L.dot(np.ones(L.shape[1])) * X.T]).T
-            v = np.linalg.solve(
-                A[k].T.dot(A[k]), A[k].T.dot(self.image.ravel()[k])
-            )
+        Sk = S[k]
+        sigma_w_inv = Sk.T.dot(Sk)
+        w = np.linalg.solve(sigma_w_inv, Sk.T.dot(self.image.ravel()[k]))
+        spline_weights = w[(self.poly_order + 1) ** 2 :]
+        L = np.sum([L.multiply(w).tocsr() for L, w in zip(Ls, spline_weights)])
+        A = np.vstack([X.T, L.dot(np.ones(L.shape[1])) * X.T]).T
+        Ak = A[k]
+        sigma_w_inv = Ak.T.dot(Ak)
+        v = np.linalg.solve(sigma_w_inv, Ak.T.dot(self.image.ravel()[k]))
 
-            bkg = (
-                A[:, : X.shape[1]]
-                .dot(v[: X.shape[1]])
-                .reshape(self.cutout_size)
-            )
-            spots = (
-                A[:, X.shape[1] :]
-                .dot(v[X.shape[1] :])
-                .reshape(self.cutout_size)
-            )
-            spot_normalization = X.dot(v[X.shape[1] :]).reshape(
-                self.cutout_size
-            )
-            spot_normalization *= spline_weights.sum()
+        bkg = A[:, : X.shape[1]].dot(v[: X.shape[1]]).reshape(self.cutout_size)
+        spots = (
+            A[:, X.shape[1] :].dot(v[X.shape[1] :]).reshape(self.cutout_size)
+        )
+        spot_normalization = X.dot(v[X.shape[1] :]).reshape(self.cutout_size)
+        spot_normalization *= spline_weights.sum()
 
-            # s = np.argsort((self.image - bkg - spots).ravel())
-            # cut out top and bottom 0.5%
-            # ns = int(np.ceil(len(s) * 0.005))
-            # k[np.hstack([s[:ns], s[-ns:]])] = False
+        # s = np.argsort((self.image - bkg - spots).ravel())
+        # cut out top and bottom 0.5%
+        # ns = int(np.ceil(len(s) * 0.005))
+        # k[np.hstack([s[:ns], s[-ns:]])] = False
         # update pixel mask
         resids = (self.image - bkg) / spot_normalization - (
             spots / spot_normalization
@@ -414,9 +402,9 @@ class Frame(object):
 
         k = self.pixel_mask.copy().ravel()
         for count in range(3):
-            w = np.linalg.solve(
-                S[k].T.dot(S[k]), S[k].T.dot(self.image.ravel()[k])
-            )
+            Sk = S[k]
+            sigma_w_inv = Sk.T.dot(Sk)
+            w = np.linalg.solve(sigma_w_inv, Sk.T.dot(self.image.ravel()[k]))
             bkg = X.dot(w[: (self.poly_order + 1) ** 2]).reshape(
                 self.cutout_size
             )
@@ -503,7 +491,7 @@ class Frame(object):
             imshow = ax[0, 0].pcolormesh(
                 C,
                 R,
-                self.sip.mu_x_to_Polynomial().evaluate(
+                self.sip.mu_x_to_Model().evaluate(
                     x=C.astype(float), y=R.astype(float)
                 ),
                 vmin=-1,
@@ -513,7 +501,7 @@ class Frame(object):
             imshow = ax[0, 1].pcolormesh(
                 C,
                 R,
-                self.sip.mu_y_to_Polynomial().evaluate(
+                self.sip.mu_y_to_Model().evaluate(
                     x=C.astype(float), y=R.astype(float)
                 ),
                 vmin=-1,

@@ -1,6 +1,6 @@
 [project]
 name = "talbotextractor"
-version = "0.2.0"
+version = "0.2.1"
 description = ""
 authors = [
     {name = "Christina Hedges",email = "christina.l.hedges@nasa.gov"}
@@ -12,7 +12,7 @@ dependencies = [
     "numpy (>=1.2)",
     "pandas (>=2.2.3,<3.0.0)",
     "appdirs (>=1.4.4,<2.0.0)",
-    "lamatrix (>=1.0.0,<2.0.0)",
+    "lamatrix (>=1.0.1,<2.0.0)",
     "sparse3d (>=1.2.10)",
     "astropy (>=6.0.0)",
     "tqdm (>=4.67.1,<5.0.0)",
@@ -41,6 +41,7 @@ mkdocs-include-markdown-plugin = "^7.1.4"
 mkdocstrings = {version = "^0.28.2", extras = ["python"]}
 jupyter-contrib-nbextensions = "^0.7.0"
 notebook = ">=6.0.0,<7.0.0"
+line-profiler = "^5.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
