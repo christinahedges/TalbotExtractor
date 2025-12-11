@@ -349,7 +349,7 @@ class Frame(object):
         sigma_w_inv = Sk.T.dot(Sk)
         w = np.linalg.solve(sigma_w_inv, Sk.T.dot(self.image.ravel()[k]))
         spline_weights = w[(self.poly_order + 1) ** 2 :]
-        L = np.sum([L.multiply(w).tocsr() for L, w in zip(Ls, spline_weights)])
+        L = np.sum([L.tocsr().multiply(w) for L, w in zip(Ls, spline_weights)])
         A = np.vstack([X.T, L.dot(np.ones(L.shape[1])) * X.T]).T
         Ak = A[k]
         sigma_w_inv = Ak.T.dot(Ak)

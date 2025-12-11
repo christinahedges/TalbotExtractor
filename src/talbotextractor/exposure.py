@@ -184,7 +184,7 @@ class Exposure(object):
 
                 buf.close()
 
-    def fit_frame_prf(self, frame_index):
+    def fit_frame_prf(self, frame_index, update_positions=False):
         image = self.data[frame_index].astype(float) - self.data[0].astype(
             float
         )
@@ -204,12 +204,17 @@ class Exposure(object):
             A=self.keyframe.A @ O2.T,
             sip=self.keyframe.sip,
         )
-        frame.fit_bkg_and_spots()
+        if update_positions:
+            frame.fit_bkg_and_spots()
+        else:
+            frame.fit_bkg_and_spots(Ls=self.Ls)
         return frame
 
-    def get_prf_hdulist(self):
+    def get_prf_hdulist(self, update_position=False):
         hdus = [
-            self.fit_frame_prf(idx).prf_hdulist[1]
+            self.fit_frame_prf(
+                idx, update_position=update_position
+            ).prf_hdulist[1]
             for idx in tqdm(np.arange(1, self.nframes), position=0, leave=True)
         ]
         hdulist = fits.HDUList([primaryHDU(), *hdus])
@@ -308,7 +313,7 @@ class Exposure(object):
         self.figs.append(fig)
         plt.close(fig)
 
-    def fit_frame(self, frame_index):
+    def fit_frame(self, frame_index, update_positions=False):
         """Fit an individual frame"""
         if self._calibrated != "Calibrated":
             raise ValueError(
@@ -333,11 +338,16 @@ class Exposure(object):
             ).T,
             columns=["spot_row", "spot_column", "pix_row", "pix_column"],
         ).set_index(["spot_row", "spot_column", "pix_row", "pix_column"])
-        frame = self.fit_frame_prf(frame_index)
+        frame = self.fit_frame_prf(
+            frame_index, update_positions=update_positions
+        )
 
         k = frame.pixel_mask.ravel()
-        Ls = frame.get_spline_spot_design_matrices()
-        Lc = np.sum([L.multiply(w).tocsr() for L, w in zip(Ls, frame.weights)])
+        if update_positions:
+            Ls = frame.get_spline_spot_design_matrices()
+        else:
+            Ls = self.Ls
+        Lc = np.sum([L.tocsr().multiply(w) for L, w in zip(Ls, frame.weights)])
         Lc.eliminate_zeros()
         prior_mu = np.zeros(Lc.shape[1])
         prior_sigma = np.ones(Lc.shape[1]) * 1e6
@@ -349,10 +359,10 @@ class Exposure(object):
             ).T
             + sparse.csr_matrix(prior_mu / prior_sigma**2).T,
         )  # / frame.psf_norm
-        rt, ct = frame.spot_pixel_locations
-        dy, dx = frame.spot_pixel_location_distortion
-        rt -= frame.cutout_center[0] - dy
-        ct -= frame.cutout_center[1] - dx
+        # rt, ct = frame.spot_pixel_locations
+        # dy, dx = frame.spot_pixel_location_distortion
+        # rt -= frame.cutout_center[0] - dy
+        # ct -= frame.cutout_center[1] - dx
         tot = np.asarray(
             Lc.multiply(frame.pixel_mask.ravel()[:, None].astype(float)).sum(
                 axis=0
@@ -367,16 +377,45 @@ class Exposure(object):
         X = frame.get_spot_polynomial_design_matrix()
         df["bkg"] = X.dot(frame.bkg_weights)
         w = np.linalg.solve(X[j].T.dot(X[j]), X[j].T.dot(df.flux.values[j]))
-        df["correction"] = X.dot(w) / np.mean(X[j].dot(w))
-        model = Lc.dot(best_fit_weights).reshape(self.cutout_size)
-        return frame, df, model
+        correction = X.dot(w) / np.mean(X[j].dot(w))
+        df["correction"] = correction
+        spot_model = Lc.dot(best_fit_weights).reshape(self.cutout_size)
+        bkg_model = (
+            frame.get_polynomial_design_matrix()
+            .dot(frame.bkg_weights)
+            .reshape(self.cutout_size)
+        )
+        return frame, df, spot_model, bkg_model
 
-    def get_all_hdulists(self):
+    def get_all_hdulists(self, update_positions=False):
+        """
+        Call this function to get the output of the extractor as fits files.
+
+        Use `update_positions` to set whether each frame updates the positions of the spots.
+        This is slower, but if you think the spots move appreciably in each frame you should set this to True.
+
+        Returns
+        -------
+        prf_hdu: astropy.io.fits.HDUList
+            HDUList of the PRF model information, can be used to recreate the PRF model.
+        spot_hdu: astropy.io.fits.HDUList
+            HDUList of the spot brightness information
+        model_hdu: astropy.io.fits.HDUList
+            HDUList of the spot model in the cutout region
+        bkg_model_hdu: astropy.io.fits.HDUList
+            HDUList of the background model in the cutout region
+        data_hdu: astropy.io.fits.HDUList
+            HDUList of the data in the cutout region
+        """
         prf_hdus = []
         spot_hdus = []
         model_hdus = []
+        bkg_model_hdus = []
+        data_hdus = []
         for idx in tqdm(np.arange(1, self.nframes), position=0, leave=True):
-            frame, df, model = self.fit_frame(idx)
+            frame, df, spot_model, bkg_model = self.fit_frame(
+                idx, update_positions=update_positions
+            )
             prf_hdus.append(frame.prf_hdulist[1])
             spot_hdus.append(
                 fits.TableHDU.from_columns(
@@ -389,7 +428,19 @@ class Exposure(object):
             )
             model_hdus.append(
                 fits.CompImageHDU(
-                    model,
+                    spot_model,
+                    name=f"FRAME_{idx:02}",
+                )
+            )
+            bkg_model_hdus.append(
+                fits.CompImageHDU(
+                    bkg_model,
+                    name=f"FRAME_{idx:02}",
+                )
+            )
+            data_hdus.append(
+                fits.CompImageHDU(
+                    frame.image,
                     name=f"FRAME_{idx:02}",
                 )
             )
@@ -398,5 +449,13 @@ class Exposure(object):
         prf_hdulist = fits.HDUList([hdu0, *prf_hdus])
         spot_hdulist = fits.HDUList([hdu0, *spot_hdus])
         model_hdulist = fits.HDUList([hdu0, *model_hdus])
+        bkg_model_hdulist = fits.HDUList([hdu0, *bkg_model_hdus])
+        data_hdulist = fits.HDUList([hdu0, *data_hdus])
         self._plot_prf_hdulist(prf_hdulist)
-        return prf_hdulist, spot_hdulist, model_hdulist
+        return (
+            prf_hdulist,
+            spot_hdulist,
+            model_hdulist,
+            bkg_model_hdulist,
+            data_hdulist,
+        )
